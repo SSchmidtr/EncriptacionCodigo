@@ -1,6 +1,5 @@
 import random 
 from enviar_mensaje import enviar
-from sha1 import sha1_funcion, hmac_sha1
 
 def modulo(a,b):
     h = 1
