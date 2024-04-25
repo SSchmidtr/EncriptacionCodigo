@@ -6,4 +6,4 @@ COPY . .
 EXPOSE 8501
 
 # Set the command to run the Streamlit app when the container starts
-CMD ["streamlit", "run", "app.py"]
+CMD ["streamlit", "run", "exeproyecto.py"]
