@@ -3,8 +3,9 @@ from streamlit_ace import st_ace
 import psycopg2
 import hashlib
 from psycopg2 import sql
+import contextlib
+import io
 
-# Conexión a la base de datos
 def obtener_conexion_db():
     return psycopg2.connect(
         host="db",
@@ -14,7 +15,20 @@ def obtener_conexion_db():
         password="cripto"
     )
 
-# Validación del usuario
+def run_and_capture_output(code):
+    # Create a string buffer to capture stdout
+    output_buffer = io.StringIO()
+
+    # Redirect stdout to the buffer
+    with contextlib.redirect_stdout(output_buffer):
+        # Execute the code
+        exec(code)
+
+    # Get the captured output
+    output = output_buffer.getvalue()
+    output_buffer.close()
+    return output
+
 def validar_usuario(contraseña_ingresada):
     conn = obtener_conexion_db()
     cursor = conn.cursor()
@@ -35,31 +49,21 @@ def obtener_codigo_almacenado():
     conn = obtener_conexion_db()
     cursor = conn.cursor()
     query = sql.SQL("SELECT codigo FROM codigo_guardado")
-    cursor.execute(query, (1,))  # Suponiendo que el usuario_id es 1 por ahora
+    cursor.execute(query, (1,))
     result = cursor.fetchone()
     cursor.close()
     conn.close()
     return result[0] if result else "print('No code found!')"
 
-
-# Almacenamiento del código
 def guardar_codigo(codigo):
     conn = obtener_conexion_db()
     cursor = conn.cursor()
-
-    # Uso adecuado de sql.SQL con formateo de argumentos
-    query = sql.SQL("UPDATE codigo_guardado SET codigo = %s")
-
-    # Pasar ambos argumentos en una tupla para el método `execute`
-    cursor.execute(query, (codigo, 1))  # Almacenar para el usuario con ID 1
-
-    # Confirmar cambios en la base de datos
+    query = sql.SQL("UPDATE codigo_guardado SET codigo = {}").format(sql.Literal(codigo))
+    cursor.execute(query, (codigo,))
     conn.commit()
     cursor.close()
     conn.close()
 
-
-# Formulario de inicio de sesión
 def mostrar_formulario_inicio_sesion():
     st.image('resources/Logo_del_ITESM.svg', width=100)
     contraseña_ingresada = st.text_input("Contraseña", type="password", key="contraseña")
@@ -72,7 +76,6 @@ def mostrar_formulario_inicio_sesion():
         else:
             st.error("Error de inicio de sesión. Por favor, verifica tus credenciales.")
 
-# Función principal para el inicio de sesión y el editor
 def main():
     st.set_page_config(
         page_title="Envío de mensajes",
@@ -86,18 +89,20 @@ def main():
         mostrar_formulario_inicio_sesion()
 
     if st.session_state.usuario_autenticado:
-        codigo_actual = obtener_codigo_almacenado()  # Recuperar el código almacenado
+        codigo_actual = obtener_codigo_almacenado()
         if 'permiso' in st.session_state and 'editar' in st.session_state.permiso:
             st.subheader('Editar')
-            editado = st_ace(value=codigo_actual, language='python', key='editor')  # Mostrar el código almacenado
+            editado = st_ace(value=codigo_actual, language='python', key='editor')
             if st.button("Guardar código"):
-                guardar_codigo(editado)  # Almacenar el código editado
+                guardar_codigo(editado)
                 st.success("Código guardado con éxito!")
             
         if 'permiso' in st.session_state and 'correr' in st.session_state.permiso:
             st.subheader('Correr')
-            st.write('Hello world!')         
-
-# Ejecución de la función principal
+            codigo_actual = obtener_codigo_almacenado()
+            if st.button("Correr código"):
+                output = run_and_capture_output(codigo_actual)
+                st.write(f"Output: {output}")
+                
 if __name__ == "__main__":
     main()
