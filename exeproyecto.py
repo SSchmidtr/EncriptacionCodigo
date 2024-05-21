@@ -5,6 +5,7 @@ import hashlib
 from psycopg2 import sql
 import contextlib
 import io
+from portaladmin import PanelAdmin
 
 def obtener_conexion_db():
     return psycopg2.connect(
@@ -16,36 +17,34 @@ def obtener_conexion_db():
     )
 
 def run_and_capture_output(code):
-    # Create a string buffer to capture stdout
+    #Si es imagen se puede ver una imagen tambien
+    #Imágen siendo gráfico o algo similar
     output_buffer = io.StringIO()
-
-    # Redirect stdout to the buffer
     with contextlib.redirect_stdout(output_buffer):
-        # Execute the code
         exec(code)
-
-    # Get the captured output
     output = output_buffer.getvalue()
     output_buffer.close()
     return output
 
-def validar_usuario(contraseña_ingresada):
+def validar_usuario(usuario ,contraseña_ingresada):
     conn = obtener_conexion_db()
     cursor = conn.cursor()
+    usuario = usuario.strip().lower()
+    contraseña_ingresada = contraseña_ingresada.strip().lower()
     contraseña_hash = hashlib.sha256(contraseña_ingresada.encode('utf-8')).hexdigest()
-    query = sql.SQL("SELECT permiso FROM usuarios WHERE contraseña = %s")
-    cursor.execute(query, (contraseña_hash,))
+    query = sql.SQL("SELECT permiso FROM usuarios WHERE usuario = %s AND contraseña = %s")
+    cursor.execute(query, (usuario,contraseña_hash,))
     result = cursor.fetchone()
     cursor.close()
     conn.close()
 
     if result:
         permiso = result[0].split(',')
-        return True, permiso
-    else:
+        return True, [perm.lower() for perm in permiso]
         return False, []
 
 def obtener_codigo_almacenado():
+    #desencriptar con el hash de la combinación de contraseñas
     conn = obtener_conexion_db()
     cursor = conn.cursor()
     query = sql.SQL("SELECT codigo FROM codigo_guardado")
@@ -56,6 +55,7 @@ def obtener_codigo_almacenado():
     return result[0] if result else "print('No code found!')"
 
 def guardar_codigo(codigo):
+    #Guardar el código encriptado con el hash de la combinación de contraseñas
     conn = obtener_conexion_db()
     cursor = conn.cursor()
     query = sql.SQL("UPDATE codigo_guardado SET codigo = {}").format(sql.Literal(codigo))
@@ -65,10 +65,11 @@ def guardar_codigo(codigo):
     conn.close()
 
 def mostrar_formulario_inicio_sesion():
-    st.image('resources/Logo_del_ITESM.svg', width=100)
+    st.image('resources/dmx.jpg', width=100)
+    usuario = st.text_input("Usuario", key="usuario")
     contraseña_ingresada = st.text_input("Contraseña", type="password", key="contraseña")
     if st.button("Iniciar sesión"):
-        usuario_valido, permiso = validar_usuario(contraseña_ingresada)
+        usuario_valido, permiso = validar_usuario(usuario,contraseña_ingresada)
         if usuario_valido:
             st.session_state.usuario_autenticado = True
             st.session_state.permiso = permiso
@@ -87,22 +88,40 @@ def main():
 
     if not st.session_state.usuario_autenticado:
         mostrar_formulario_inicio_sesion()
+    else:
+        herramientas_disponibles = {
+            "Editar": "Editar",
+            "Correr": "Correr",
+            "Admin Portal": "Admin Portal"
+        }
+        
+        if 'todo' in st.session_state.permiso:
+            opciones_sidebar = list(herramientas_disponibles.keys())
+        else:
+            opciones_sidebar = [herramienta for herramienta in herramientas_disponibles if herramienta.lower() in st.session_state.permiso]
+        
+        opcion_seleccionada = st.sidebar.radio("Seleccione una herramienta", opciones_sidebar)
 
-    if st.session_state.usuario_autenticado:
-        codigo_actual = obtener_codigo_almacenado()
-        if 'permiso' in st.session_state and 'editar' in st.session_state.permiso:
+        if opcion_seleccionada == "Editar":
+            st.image('resources/dmx.jpg', width=100)
             st.subheader('Editar')
+            codigo_actual = obtener_codigo_almacenado()
             editado = st_ace(value=codigo_actual, language='python', key='editor')
             if st.button("Guardar código"):
                 guardar_codigo(editado)
                 st.success("Código guardado con éxito!")
-            
-        if 'permiso' in st.session_state and 'correr' in st.session_state.permiso:
+
+        elif opcion_seleccionada == "Correr":
+            st.image('resources/dmx.jpg', width=100)
             st.subheader('Correr')
             codigo_actual = obtener_codigo_almacenado()
             if st.button("Correr código"):
                 output = run_and_capture_output(codigo_actual)
                 st.write(f"Output: {output}")
-                
+
+        elif opcion_seleccionada == "Admin Portal":
+            panel_admin = PanelAdmin()
+            panel_admin.main()
+
 if __name__ == "__main__":
     main()
