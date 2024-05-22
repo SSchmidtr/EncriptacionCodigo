@@ -1,3 +1,6 @@
 streamlit
 streamlit_ace
 psycopg2-binary
+cryptography
+pycryptodome
+matplotlib
